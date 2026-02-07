@@ -1,14 +1,89 @@
 """Core verification logic for requirements matching."""
 
 import sys
+import hashlib
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 from collections import defaultdict
 
 from .analyzer import extract_imports_from_file, find_python_files
 from .config import load_config
-from .constants import STDLIB_MODULES
+from .constants import STDLIB_MODULES, PRUNE_DIR, PRUNE_CONFIG_FILE
 from .parser import normalize_name, parse_requirements
+
+
+def calculate_file_hash(file_path: Path) -> str:
+    """Calculate SHA256 hash of a file.
+    
+    Args:
+        file_path: Path to the file
+        
+    Returns:
+        Hex string of the file hash
+    """
+    sha256_hash = hashlib.sha256()
+    with open(file_path, 'rb') as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()
+
+
+def validate_config_against_requirements(config: Dict, requirements_file: Path, config_file: Optional[Path]) -> None:
+    """
+    Validate that config metadata matches the requirements file being verified.
+    
+    Args:
+        config: Loaded configuration dictionary
+        requirements_file: Path to requirements file being verified
+        config_file: Path to config file (if explicitly provided)
+        
+    Raises:
+        SystemExit: If validation fails
+    """
+    metadata = config.get('_metadata', {})
+    
+    # If no metadata, it's an old/manual config - just warn
+    if not metadata:
+        if not config_file:  # Only warn for auto-loaded configs
+            print("⚠️  Warning: Config has no metadata (may be outdated or manually created)")
+            print("   Consider running: prune init --update\n")
+        return
+    
+    source_req_name = metadata.get('source_requirements', '')
+    source_req_hash = metadata.get('source_requirements_hash', '')
+    
+    # Check 1: Requirements file name mismatch
+    if source_req_name and source_req_name != requirements_file.name:
+        print(f"❌ Error: Config mismatch detected", file=sys.stderr)
+        print(f"   Config was generated from: {source_req_name}", file=sys.stderr)
+        print(f"   But you're verifying against: {requirements_file.name}", file=sys.stderr)
+        
+        if config_file:
+            # Explicit config file - warn but allow
+            print(f"\n   ⚠️  You're using an explicit --config flag", file=sys.stderr)
+            print(f"   Results may be inaccurate!", file=sys.stderr)
+            response = input("   Continue anyway? [y/N]: ").strip().lower()
+            if response not in ['y', 'yes']:
+                print("\n❌ Verification cancelled", file=sys.stderr)
+                sys.exit(1)
+            print()
+        else:
+            # Auto-loaded config - hard error
+            print(f"\n   Fix: Run 'prune init --req {requirements_file.name}' to generate matching config", file=sys.stderr)
+            sys.exit(1)
+    
+    # Check 2: Requirements file content has changed
+    if source_req_hash and requirements_file.exists():
+        current_hash = calculate_file_hash(requirements_file)
+        if current_hash != source_req_hash:
+            print(f"⚠️  Warning: {requirements_file.name} has changed since config was generated", file=sys.stderr)
+            print(f"   Config may be outdated and results could be inaccurate", file=sys.stderr)
+            print(f"\n   Recommended: Run 'prune init --update' to refresh config", file=sys.stderr)
+            response = input("   Continue anyway? [y/N]: ").strip().lower()
+            if response not in ['y', 'yes']:
+                print("\n❌ Verification cancelled", file=sys.stderr)
+                sys.exit(1)
+            print()
 
 
 def match_import_to_package(import_name: str, 
@@ -57,8 +132,18 @@ def verify_requirements(requirements_file: Path,
         config_file: Optional configuration file path
         generate_mapping: Whether to generate .mapping and .unmatched-mapping files
     """
+    # Check if .prune directory exists (helpful but not required)
+    prune_dir = Path.cwd() / PRUNE_DIR
+    if not prune_dir.exists() and not config_file:
+        print("💡 Tip: Run 'prune init' to create a .prune directory with configuration")
+        print("   This will improve accuracy by fetching metadata from PyPI\n")
+    
     # Load configuration
     config = load_config(config_file)
+    
+    # Validate config against requirements file
+    validate_config_against_requirements(config, requirements_file, config_file)
+    
     package_mappings = config.get('package_mappings', {})
     runtime_dependencies = config.get('runtime_dependencies', {})
     package_extras = config.get('package_extras', {})
@@ -110,7 +195,7 @@ def verify_requirements(requirements_file: Path,
                 import_name, requirements, package_mappings
             )
             
-            if package_name:
+            if package_name and requirement_line:
                 used_requirements[package_name] = requirement_line
                 package_to_files[package_name].append(py_file)
             else:
