@@ -4,6 +4,8 @@ import json
 import re
 import sys
 import time
+import hashlib
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from urllib.request import urlopen, Request
@@ -86,6 +88,22 @@ def extract_dependencies_from_metadata(metadata: Dict) -> Tuple[List[str], Dict[
     return runtime_deps, extras_dict
 
 
+def calculate_file_hash(file_path: Path) -> str:
+    """Calculate SHA256 hash of a file.
+    
+    Args:
+        file_path: Path to the file
+        
+    Returns:
+        Hex string of the file hash
+    """
+    sha256_hash = hashlib.sha256()
+    with open(file_path, 'rb') as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()
+
+
 def create_config_from_requirements(requirements_file: Path, 
                                     requirements: Dict[str, str],
                                     output_path: Path | None = None) -> None:
@@ -139,10 +157,17 @@ def create_config_from_requirements(requirements_file: Path,
         # Small delay to be nice to PyPI
         time.sleep(0.1)
     
-    # Build config
+    # Build config with metadata
+    current_time = datetime.utcnow().isoformat() + 'Z'
     config = {
         "_comment": "Configuration generated from PyPI metadata",
-        "_generated_from": str(requirements_file),
+        "_metadata": {
+            "source_requirements": requirements_file.name,
+            "source_requirements_path": str(requirements_file.resolve()),
+            "source_requirements_hash": calculate_file_hash(requirements_file),
+            "generated_at": current_time,
+            "last_updated": current_time
+        },
         "_instructions": {
             "package_mappings": "Maps import names to package names (e.g., 'PIL' -> 'Pillow')",
             "runtime_dependencies": "Packages that trigger inclusion of other packages (from PyPI metadata)",
