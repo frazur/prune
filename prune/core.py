@@ -96,6 +96,7 @@ def verify_requirements(requirements_file: Path,
     used_requirements: Dict[str, str] = {}  # package_name -> requirement_line
     package_to_files: Dict[str, List[Path]] = defaultdict(list)  # package_name -> files using it
     unmatched_imports: Set[str] = set()
+    unmatched_to_files: Dict[str, List[Path]] = defaultdict(list)  # unmatched import -> files using it
     
     for py_file, imports in file_imports.items():
         for import_name in imports:
@@ -112,6 +113,7 @@ def verify_requirements(requirements_file: Path,
                 package_to_files[package_name].append(py_file)
             else:
                 unmatched_imports.add(import_name)
+                unmatched_to_files[import_name].append(py_file)
     
     print(f"   Matched {len(used_requirements)} requirements to imports")
     
@@ -190,6 +192,29 @@ def verify_requirements(requirements_file: Path,
                 f.write(f"{requirements[package_name]}\n")
     
     print(f"✅ Created: {output_mapping}")
+    
+    # Write unmatched imports mapping file
+    if unmatched_imports:
+        output_unmatched = requirements_file.parent / f"{requirements_file.name}.unmatched-mapping"
+        with open(output_unmatched, 'w', encoding='utf-8') as f:
+            f.write("# Imports that couldn't be matched to requirements.txt entries\n")
+            f.write("# These might be local modules or missing from requirements.txt\n\n")
+            
+            for import_name in sorted(unmatched_imports):
+                f.write(f"• {import_name}\n")
+                files = sorted(set(unmatched_to_files[import_name]))
+                for file in files:
+                    # Make path relative to one of the source paths for readability
+                    rel_path = file
+                    for source_path in source_paths:
+                        try:
+                            rel_path = file.relative_to(source_path)
+                            break
+                        except ValueError:
+                            continue
+                    f.write(f"  → {rel_path}: import {import_name}\n")
+        
+        print(f"✅ Created: {output_unmatched}")
     
     # Report unused requirements
     unused = set(requirements.keys()) - set(used_requirements.keys())
