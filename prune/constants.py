@@ -1,5 +1,9 @@
 """Constants and default configurations for prune."""
 
+# Directory and file configuration
+PRUNE_DIR = ".prune"
+PRUNE_CONFIG_FILE = "prune-conf.json"
+
 # Common mappings between import names and package names
 PACKAGE_MAPPINGS = {
     'PIL': 'Pillow',

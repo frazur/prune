@@ -24,40 +24,52 @@ pip install -e .
 
 ## 📖 Usage
 
+### Initialize Configuration
+
+Set up the `.prune` directory with configuration:
+
+```bash
+# Initialize from requirements.txt (if exists)
+prune init
+
+# Initialize from specific requirements file
+prune init --req custom-requirements.txt
+
+# Update existing configuration
+prune init --update
+
+# Update from specific file
+prune init --update --req dev-requirements.txt
+```
+
+The `init` command creates a `.prune/prune-conf.json` file by fetching metadata from PyPI. This configuration improves verification accuracy by providing package mappings and runtime dependencies.
+
+**Important:** The config is tied to the specific requirements file used during `init`. If you use a different requirements file during verification, prune will detect the mismatch and warn you.
+
 ### Basic Verification
 
 Verify requirements against your codebase:
 
 ```bash
-prune verify requirements.txt ./app ./tests
+# Uses requirements.txt by default
+prune verify ./app ./tests
+
+# Or specify a different requirements file
+prune verify ./app --requirements-file custom-requirements.txt
 ```
 
 Generate detailed mapping files:
 
 ```bash
-prune verify requirements.txt ./app --mapping
+prune verify ./app --mapping
 ```
 
 ### Using Custom Configuration
 
-Use a pre-existing configuration file:
+By default, `verify` uses `.prune/prune-conf.json` if it exists. You can also specify a custom configuration:
 
 ```bash
-prune verify requirements.txt ./app --config extras_config.json
-```
-
-### Check Dependencies from PyPI
-
-Fetch package metadata from PyPI (prints to terminal):
-
-```bash
-prune check-deps requirements.txt
-```
-
-Save the generated configuration to a file:
-
-```bash
-prune check-deps requirements.txt --output extras_config.json
+prune verify ./app --config custom-config.json
 ```
 
 ## 📂 Output Files
@@ -109,23 +121,27 @@ my_package
 
 ## ⚙️ Configuration System
 
-### Fetch from PyPI
+### Initialize Configuration
 
-Use the `check-deps` command to fetch metadata from PyPI:
+Run `init` to set up the `.prune` directory:
 
 ```bash
-# Print to terminal
-prune check-deps requirements.txt
-
-# Save to file
-prune check-deps requirements.txt --output extras_config.json
+prune init
 ```
 
-The generated configuration looks like:
+This creates `.prune/prune-conf.json` by fetching metadata from PyPI. The configuration is automatically used by `verify` and improves accuracy.
+
+The generated configuration includes metadata tracking:
 
 ```json
 {
   "_comment": "Configuration generated from PyPI metadata",
+  "_metadata": {
+    "source_requirements": "requirements.txt",
+    "source_requirements_hash": "abc123...",
+    "generated_at": "2026-02-07T10:30:00Z",
+    "last_updated": "2026-02-07T10:30:00Z"
+  },
   "package_mappings": {
     "PIL": "Pillow",
     "cv2": "opencv-python",
@@ -142,8 +158,17 @@ The generated configuration looks like:
 }
 ```
 
+### Config Validation
+
+Prune validates the configuration against your requirements file:
+
+- **File mismatch**: If you run `prune verify ./app --requirements-file custom.txt` but the config was generated from `requirements.txt`, prune will abort with an error
+- **File changed**: If `requirements.txt` has been modified since the config was generated, prune will warn you and ask for confirmation
+- **Solution**: Run `prune init --update` to refresh the configuration
+
 ### Configuration Fields
 
+- **`_metadata`** - Tracks source requirements file and hash for validation
 - **`package_mappings`** - Maps import names to package names when they differ
 - **`runtime_dependencies`** - Packages that trigger inclusion of other packages
 - **`package_extras`** - Recommended extras for packages (e.g., `fastapi[all]`)
@@ -169,11 +194,11 @@ pip install -e .
 ### Running Tests
 
 ```bash
-# Test on the prune project itself
-prune verify requirements.txt .
+# Test on the prune project itself (uses requirements.txt by default)
+prune verify .
 
-# Test dependency checking
-prune check-deps requirements.txt
+# Test with custom requirements file
+prune verify . --requirements-file dev-requirements.txt
 ```
 
 ### Project Structure
@@ -197,12 +222,13 @@ prune/
 
 ## 🎯 How It Works
 
-1. **Parse Requirements** - Reads and normalizes package names from requirements.txt
-2. **Scan Python Files** - Recursively finds all .py files in specified paths
-3. **Extract Imports** - Uses AST to extract import statements without executing code
-4. **Match Packages** - Matches imports to requirements using normalization and mappings
-5. **Check Runtime Deps** - Includes framework dependencies based on configuration
-6. **Generate Reports** - Creates .verified file (and optionally .mapping/.unmatched-mapping with `--mapping` flag)
+1. **Initialize** - Run `prune init` to fetch PyPI metadata and create `.prune/prune-conf.json`
+2. **Parse Requirements** - Reads and normalizes package names from requirements.txt
+3. **Scan Python Files** - Recursively finds all .py files in specified paths
+4. **Extract Imports** - Uses AST to extract import statements without executing code
+5. **Match Packages** - Matches imports to requirements using normalization and mappings
+6. **Check Runtime Deps** - Includes framework dependencies based on configuration
+7. **Generate Reports** - Creates .verified file (and optionally .mapping/.unmatched-mapping with `--mapping` flag)
 
 ## 📋 Common Patterns
 
@@ -245,14 +271,15 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 💡 Tips
 
+- Run `prune init` first to set up configuration with PyPI metadata
 - Run verification before committing to catch unused dependencies early
-- Use `check-deps` to explore PyPI metadata and discover runtime dependencies
-- Add `--mapping` flag to generate detailed usage reports
+- The `.prune` directory is automatically used by verify (add to .gitignore if preferred)
+- Use `--mapping` flag to generate detailed usage reports
 - Review the `.mapping` file to understand dependency usage
 - Check `.unmatched-mapping` for local modules or missing dependencies
 - Add custom mappings for proprietary or uncommon packages
 - Standard library modules are automatically excluded (no false positives)
-- Use `check-deps` without `--output` to preview configuration before saving
+- Update configuration with `prune init --update` when requirements change
 
 ## 🐛 Known Limitations
 
