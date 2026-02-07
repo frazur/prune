@@ -32,6 +32,12 @@ Verify requirements against your codebase:
 prune verify requirements.txt ./app ./tests
 ```
 
+Generate detailed mapping files:
+
+```bash
+prune verify requirements.txt ./app --mapping
+```
+
 ### Using Custom Configuration
 
 Use a pre-existing configuration file:
@@ -56,16 +62,14 @@ prune check-deps requirements.txt --output extras_config.json
 
 ## 📂 Output Files
 
-Prune generates two files in the same directory as your requirements.txt:
-
-### `requirements.txt.verified`
+### `requirements.txt.verified` (always generated)
 Contains only the dependencies actually used in your codebase:
 ```
 arguably>=1.2.0
 requests==2.31.0
 ```
 
-### `requirements.txt.mapping`
+### `requirements.txt.mapping` (with `--mapping` flag)
 Detailed mapping showing which files use each requirement:
 ```
 ================================================================================
@@ -84,6 +88,23 @@ UNUSED REQUIREMENTS
 pandas==2.0.0
 numpy==1.24.0
 matplotlib==3.7.0
+```
+
+### `requirements.txt.unmatched-mapping` (with `--mapping` flag)
+Shows imports that couldn't be matched to any requirement:
+```
+================================================================================
+UNMATCHED IMPORTS
+================================================================================
+
+# 2 imports found in Python files but not in requirements.txt:
+
+local_module
+  → app/main.py
+  → app/utils.py
+
+my_package
+  → tests/test_utils.py
 ```
 
 ## ⚙️ Configuration System
@@ -181,7 +202,7 @@ prune/
 3. **Extract Imports** - Uses AST to extract import statements without executing code
 4. **Match Packages** - Matches imports to requirements using normalization and mappings
 5. **Check Runtime Deps** - Includes framework dependencies based on configuration
-6. **Generate Reports** - Creates .verified and .mapping files with results
+6. **Generate Reports** - Creates .verified file (and optionally .mapping/.unmatched-mapping with `--mapping` flag)
 
 ## 📋 Common Patterns
 
@@ -226,7 +247,9 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 - Run verification before committing to catch unused dependencies early
 - Use `check-deps` to explore PyPI metadata and discover runtime dependencies
+- Add `--mapping` flag to generate detailed usage reports
 - Review the `.mapping` file to understand dependency usage
+- Check `.unmatched-mapping` for local modules or missing dependencies
 - Add custom mappings for proprietary or uncommon packages
 - Standard library modules are automatically excluded (no false positives)
 - Use `check-deps` without `--output` to preview configuration before saving
