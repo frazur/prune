@@ -46,7 +46,8 @@ def match_import_to_package(import_name: str,
 
 def verify_requirements(requirements_file: Path, 
                        source_paths: List[Path], 
-                       config_file: Optional[Path] = None) -> None:
+                       config_file: Optional[Path] = None,
+                       generate_mapping: bool = False) -> None:
     """
     Main verification logic to match requirements against imports.
     
@@ -54,6 +55,7 @@ def verify_requirements(requirements_file: Path,
         requirements_file: Path to requirements.txt
         source_paths: List of source paths to scan
         config_file: Optional configuration file path
+        generate_mapping: Whether to generate .mapping and .unmatched-mapping files
     """
     # Load configuration
     config = load_config(config_file)
@@ -153,7 +155,27 @@ def verify_requirements(requirements_file: Path,
     print(f"\n✅ Created: {output_verified}")
     print(f"   Contains {len(used_requirements)} verified dependencies")
     
-    # Write mapping file
+    # Write mapping file (only if requested)
+    if not generate_mapping:
+        # Skip mapping generation, jump to reporting
+        unused = set(requirements.keys()) - set(used_requirements.keys())
+        if unused:
+            print(f"\n⚠️  Unused requirements ({len(unused)}):")
+            for pkg in sorted(unused):
+                print(f"   - {requirements[pkg]}")
+        
+        if unmatched_imports:
+            print(f"\n⚠️  Unmatched imports ({len(unmatched_imports)}):")
+            print("   These imports couldn't be matched to requirements.txt entries.")
+            print("   They might be local modules or missing from requirements.txt:")
+            for imp in sorted(unmatched_imports):
+                print(f"   - {imp}")
+            print("\n   💡 Use --mapping flag to generate detailed mapping files")
+        
+        print("\n✨ Done!")
+        return
+    
+    # Generate mapping files
     output_mapping = requirements_file.parent / f"{requirements_file.name}.mapping"
     with open(output_mapping, 'w', encoding='utf-8') as f:
         f.write("# Mapping of requirements to files that use them\n")
@@ -230,5 +252,6 @@ def verify_requirements(requirements_file: Path,
         print("   They might be local modules or missing from requirements.txt:")
         for imp in sorted(unmatched_imports):
             print(f"   - {imp}")
+        print(f"   (See {output_unmatched.name} for details)")
     
     print("\n✨ Done!")
