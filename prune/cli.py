@@ -23,26 +23,29 @@ __all__ = ['verify', 'check_deps', 'main']
 def verify(
     requirements_file: Path,
     *source_paths: Path,
-    config: Path | None = None
+    config: Path | None = None,
+    mapping: bool = False
 ):
     """
     Verify requirements.txt against actual imports in Python files.
     
     Args:
         requirements_file: Path to requirements.txt file
-        *source_paths: One or more source paths to scan for Python files
+        source_paths: One or more source paths to scan for Python files
         config: Path to existing extras configuration file (JSON)
+        mapping: Generate detailed .mapping and .unmatched-mapping files
     
     Examples:
         prune verify requirements.txt ./app
         prune verify requirements.txt ./app ./tests
         prune verify requirements.txt ./app --config extras_config.json
+        prune verify requirements.txt ./app --mapping
     """
     if not source_paths:
         print("❌ Error: At least one source path is required", file=sys.stderr)
         sys.exit(1)
     
-    verify_requirements(requirements_file, list(source_paths), config)
+    verify_requirements(requirements_file, list(source_paths), config, generate_mapping=mapping)
 
 
 @arguably.command(alias="check-deps")
