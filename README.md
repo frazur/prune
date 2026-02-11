@@ -72,6 +72,36 @@ By default, `verify` uses `.prune/prune-conf.json` if it exists. You can also sp
 prune verify ./app --config custom-config.json
 ```
 
+### Managing User Overrides
+
+Add project-specific package mappings and runtime dependencies without modifying the base configuration:
+
+```bash
+# List all user overrides
+prune override list
+prune override ls         # Short alias
+
+# Add package mapping (for custom packages where import name ≠ package name)
+prune override add-mapping mylib my-custom-package
+prune override add-mapping internal company-internal-lib
+
+# Remove package mapping
+prune override remove-mapping mylib
+prune override rm-mapping mylib   # Short alias
+
+# Add runtime dependency (mark dependency as used when trigger package is imported)
+prune override add-runtime fastapi custom-auth-middleware
+prune override add-runtime my-framework required-plugin
+
+# Remove runtime dependency
+prune override remove-runtime fastapi custom-auth-middleware
+
+# Clear all user overrides (requires confirmation)
+prune override clear
+```
+
+**User overrides have the highest priority** and are stored in `.prune/prune-conf.json` under `_user_overrides`. They override both PyPI-discovered metadata and hardcoded defaults.
+
 ## 📂 Output Files
 
 ### `requirements.txt.verified` (always generated)
@@ -172,6 +202,26 @@ Prune validates the configuration against your requirements file:
 - **`package_mappings`** - Maps import names to package names when they differ
 - **`runtime_dependencies`** - Packages that trigger inclusion of other packages
 - **`package_extras`** - Recommended extras for packages (e.g., `fastapi[all]`)
+- **`_user_overrides`** - Project-specific overrides (highest priority)
+
+### Configuration Priority
+
+Prune uses a three-tier merge system:
+
+1. **User overrides** (highest) - From `_user_overrides` in config
+2. **PyPI metadata** - Auto-discovered from package metadata
+3. **Hardcoded defaults** (lowest) - Built into prune for common packages
+
+### Auto-Discovery Features
+
+**Package Mappings**: Prune automatically discovers import-to-package mappings from installed packages using their `top_level.txt` metadata. For example:
+- `docx` → `python-docx`
+- `PIL` → `Pillow`
+- `yaml` → `PyYAML`
+
+This eliminates the need to manually configure most package mappings!
+
+**Runtime Dependencies**: When you run `prune init`, it fetches actual dependency information from PyPI for each package in your requirements. These are automatically merged with hardcoded defaults (like `fastapi` → `python-multipart`).
 
 ## 🛠️ Development
 
@@ -213,6 +263,8 @@ prune/
 │   ├── parser.py              # Requirements parsing
 │   ├── pypi.py                # PyPI metadata fetching
 │   ├── config.py              # Configuration management
+│   ├── metadata.py            # Auto-discovery of package mappings
+│   ├── overrides.py           # User overrides management
 │   └── constants.py           # Mappings and defaults
 ├── pyproject.toml             # Package configuration
 ├── requirements.txt           # Project dependencies
@@ -226,13 +278,33 @@ prune/
 2. **Parse Requirements** - Reads and normalizes package names from requirements.txt
 3. **Scan Python Files** - Recursively finds all .py files in specified paths
 4. **Extract Imports** - Uses AST to extract import statements without executing code
-5. **Match Packages** - Matches imports to requirements using normalization and mappings
-6. **Check Runtime Deps** - Includes framework dependencies based on configuration
-7. **Generate Reports** - Creates .verified file (and optionally .mapping/.unmatched-mapping with `--mapping` flag)
+5. **Auto-discover Mappings** - Scans installed packages for import-to-package mappings
+6. **Match Packages** - Matches imports to requirements using normalization, auto-discovery, and configured mappings
+7. **Check Runtime Deps** - Includes framework dependencies based on merged configuration (user overrides > PyPI > defaults)
+8. **Generate Reports** - Creates .verified file (and optionally .mapping/.unmatched-mapping with `--mapping` flag)
 
 ## 📋 Common Patterns
 
-### Adding Package Mappings
+### Adding User Overrides
+
+For project-specific package mappings or runtime dependencies:
+
+```bash
+# Custom internal package
+prune override add-mapping mylib my-company-package
+
+# Framework needs custom middleware
+prune override add-runtime fastapi custom-auth-middleware
+
+# List what you've configured
+prune override ls
+```
+
+### Adding Package Mappings (Built-in)
+
+### Adding Package Mappings (Built-in)
+
+Most package mappings are auto-discovered, but you can add hardcoded defaults for rare cases:
 
 When imports don't match package names:
 
@@ -244,7 +316,9 @@ PACKAGE_MAPPINGS = {
 }
 ```
 
-### Runtime Dependencies
+**Note**: With auto-discovery, you rarely need to add these manually anymore!
+
+### Runtime Dependencies (Built-in)
 
 Frameworks that require packages not directly imported:
 
@@ -255,6 +329,8 @@ DEFAULT_RUNTIME_DEPENDENCIES = {
     'pytest': ['pluggy', 'iniconfig'],  # Core dependencies
 }
 ```
+
+**Note**: These are merged with PyPI-discovered dependencies and user overrides.
 
 ## 🔧 Requirements
 
@@ -277,7 +353,9 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - Use `--mapping` flag to generate detailed usage reports
 - Review the `.mapping` file to understand dependency usage
 - Check `.unmatched-mapping` for local modules or missing dependencies
-- Add custom mappings for proprietary or uncommon packages
+- Use `prune override` commands for project-specific customizations
+- User overrides are stored in `.prune/prune-conf.json` and can be committed to git for team consistency
+- Auto-discovery finds most package mappings automatically - no manual configuration needed!
 - Standard library modules are automatically excluded (no false positives)
 - Update configuration with `prune init --update` when requirements change
 
@@ -287,3 +365,10 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - Dynamic imports (`importlib`) are not detected
 - Conditional imports in try/except blocks are captured
 - Does not detect indirect dependencies (sub-dependencies)
+
+## 🆕 Recent Features
+
+- **Auto-discovery** - Automatically finds package mappings from installed packages using metadata
+- **User overrides** - Project-specific customization via `prune override` commands
+- **Merged runtime dependencies** - Combines hardcoded defaults, PyPI metadata, and user overrides
+- **Priority system** - User overrides > PyPI config > hardcoded defaults

@@ -8,8 +8,9 @@ from collections import defaultdict
 
 from .analyzer import extract_imports_from_file, find_python_files
 from .config import load_config
-from .constants import STDLIB_MODULES, PRUNE_DIR, PRUNE_CONFIG_FILE
+from .constants import STDLIB_MODULES, PRUNE_DIR
 from .parser import normalize_name, parse_requirements
+from .metadata import build_package_import_map
 
 
 def calculate_file_hash(file_path: Path) -> str:
@@ -88,21 +89,29 @@ def validate_config_against_requirements(config: Dict, requirements_file: Path, 
 
 def match_import_to_package(import_name: str, 
                             requirements: Dict[str, str], 
-                            package_mappings: Dict[str, str]) -> Tuple[Optional[str], Optional[str]]:
+                            package_mappings: Dict[str, str],
+                            installed_mappings: Dict[str, str]) -> Tuple[Optional[str], Optional[str]]:
     """
     Match an import name to a package in requirements.
     
     Args:
         import_name: Name of the imported module
         requirements: Parsed requirements dictionary
-        package_mappings: Import to package name mappings
+        package_mappings: Import to package name mappings (manual overrides)
+        installed_mappings: Auto-discovered mappings from installed packages
         
     Returns:
         Tuple of (package_name, requirement_line) or (None, None) if not found
     """
-    # First check if there's a known mapping
+    # First check manual mappings (highest priority)
     if import_name in package_mappings:
         mapped_name = normalize_name(package_mappings[import_name])
+        if mapped_name in requirements:
+            return mapped_name, requirements[mapped_name]
+    
+    # Then check auto-discovered mappings from installed packages
+    if import_name in installed_mappings:
+        mapped_name = normalize_name(installed_mappings[import_name])
         if mapped_name in requirements:
             return mapped_name, requirements[mapped_name]
     
@@ -179,6 +188,12 @@ def verify_requirements(requirements_file: Path,
     
     print(f"   Found {len(all_imports)} unique imports")
     
+    # Build auto-discovered mappings from installed packages
+    print("\n🔍 Discovering package mappings from installed packages...")
+    installed_mappings = build_package_import_map()
+    if installed_mappings:
+        print(f"   Found {len(installed_mappings)} auto-discovered mappings")
+    
     print("\n🔗 Matching imports to requirements...")
     used_requirements: Dict[str, str] = {}  # package_name -> requirement_line
     package_to_files: Dict[str, List[Path]] = defaultdict(list)  # package_name -> files using it
@@ -192,7 +207,7 @@ def verify_requirements(requirements_file: Path,
                 continue
             
             package_name, requirement_line = match_import_to_package(
-                import_name, requirements, package_mappings
+                import_name, requirements, package_mappings, installed_mappings
             )
             
             if package_name and requirement_line:
