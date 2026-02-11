@@ -13,12 +13,13 @@ from .core import verify_requirements
 from .parser import parse_requirements
 from .pypi import create_config_from_requirements
 from .constants import PRUNE_DIR, PRUNE_CONFIG_FILE, DEFAULT_EXTRAS_CONFIG
+from . import overrides
 import json
 
 
 # Required by arguably for --version flag
 __version__ = _pkg_version
-__all__ = ['verify', 'init', 'main']
+__all__ = ['verify', 'init', 'override', 'main']
 
 
 @arguably.command
@@ -55,7 +56,8 @@ def verify(
 def init(
     *,
     req: Path | None = None,
-    update: bool = False
+    update: bool = False,
+    clear_overrides: bool = False
 ):
     """
     Initialize the .prune directory and configuration.
@@ -63,12 +65,14 @@ def init(
     Args:
         req: Path to requirements file to generate config from (default: requirements.txt)
         update: Update existing configuration from requirements file
+        clear_overrides: Clear user overrides when updating (only with --update)
     
     Examples:
         prune init                           # Create config from requirements.txt if exists
         prune init --req custom-reqs.txt     # Create config from specific file
         prune init --update                  # Update config from requirements.txt
         prune init --update --req dev.txt    # Update config from specific file
+        prune init --update --clear-overrides  # Update and clear user overrides
     """
     # Create .prune directory if it doesn't exist
     prune_dir = Path.cwd() / PRUNE_DIR
@@ -80,6 +84,10 @@ def init(
     # Determine requirements file to use
     requirements_file = req if req else Path("requirements.txt")
     
+    # Validate --clear-overrides usage
+    if clear_overrides and not update:
+        print("⚠️  Warning: --clear-overrides only applies when using --update")
+    
     # Check if we're updating or creating new
     if update:
         if not config_path.exists():
@@ -87,13 +95,21 @@ def init(
             print("   Creating new configuration...")
         else:
             print(f"🔄 Updating configuration: {config_path}")
+            if clear_overrides:
+                print("   ⚠️  Clearing user overrides")
     
     # Try to generate config from requirements file
     if requirements_file.exists():
         print(f"📋 Reading requirements from: {requirements_file}")
         requirements = parse_requirements(requirements_file)
         print(f"   Found {len(requirements)} packages")
-        create_config_from_requirements(requirements_file, requirements, config_path)
+        create_config_from_requirements(
+            requirements_file, 
+            requirements, 
+            config_path, 
+            update_mode=update,
+            preserve_overrides=not clear_overrides
+        )
     else:
         # Create default config if no requirements file
         if req:
@@ -110,6 +126,115 @@ def init(
             except Exception as e:
                 print(f"❌ Error creating config file: {e}", file=sys.stderr)
                 sys.exit(1)
+
+
+@arguably.command(alias="override__ls")
+def override__list():
+    """
+    List all user overrides.
+    
+    Shows package mappings and runtime dependencies that have been
+    manually configured for this project.
+    
+    Examples:
+        prune override list
+        prune override ls
+    """
+    overrides.list_overrides()
+
+
+@arguably.command
+def override__ls():
+    """Alias for override list."""
+    overrides.list_overrides()
+
+
+@arguably.command
+def override__add_mapping(import_name: str, package_name: str):
+    """
+    Add a package mapping override.
+    
+    Maps an import name to a package name. Useful for custom packages
+    or when the import name doesn't match the package name.
+    
+    Args:
+        import_name: The import name (e.g., 'mylib')
+        package_name: The package name in requirements.txt (e.g., 'my-custom-package')
+    
+    Examples:
+        prune override add-mapping mylib my-custom-package
+        prune override add-mapping internal company-internal-lib
+    """
+    overrides.add_mapping(import_name, package_name)
+
+
+@arguably.command(alias="override__rm_mapping")
+def override__remove_mapping(import_name: str):
+    """
+    Remove a package mapping override.
+    
+    Args:
+        import_name: The import name to remove
+    
+    Examples:
+        prune override remove-mapping mylib
+        prune override rm-mapping mylib
+    """
+    overrides.remove_mapping(import_name)
+
+
+@arguably.command
+def override__rm_mapping(import_name: str):
+    """Alias for override remove-mapping."""
+    overrides.remove_mapping(import_name)
+
+
+@arguably.command
+def override__add_runtime(trigger_package: str, dependency: str):
+    """
+    Add a runtime dependency override.
+    
+    Specifies that when trigger_package is used, dependency should also
+    be marked as used even if not directly imported.
+    
+    Args:
+        trigger_package: The package that triggers the dependency
+        dependency: The runtime dependency to add
+    
+    Examples:
+        prune override add-runtime fastapi custom-auth-middleware
+        prune override add-runtime my-framework required-plugin
+    """
+    overrides.add_runtime(trigger_package, dependency)
+
+
+@arguably.command
+def override__remove_runtime(trigger_package: str, dependency: str):
+    """
+    Remove a runtime dependency override.
+    
+    Args:
+        trigger_package: The package that triggers the dependency
+        dependency: The runtime dependency to remove
+    
+    Examples:
+        prune override remove-runtime fastapi custom-auth-middleware
+    """
+    overrides.remove_runtime(trigger_package, dependency)
+
+
+@arguably.command
+def override__clear():
+    """
+    Clear all user overrides.
+    
+    Removes all custom package mappings and runtime dependencies.
+    This action requires confirmation.
+    
+    Examples:
+        prune override clear
+    """
+    overrides.clear_overrides()
 
 
 def main():
