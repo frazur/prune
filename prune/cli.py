@@ -56,7 +56,8 @@ def verify(
 def init(
     *,
     req: Path | None = None,
-    update: bool = False
+    update: bool = False,
+    clear_overrides: bool = False
 ):
     """
     Initialize the .prune directory and configuration.
@@ -64,12 +65,14 @@ def init(
     Args:
         req: Path to requirements file to generate config from (default: requirements.txt)
         update: Update existing configuration from requirements file
+        clear_overrides: Clear user overrides when updating (only with --update)
     
     Examples:
         prune init                           # Create config from requirements.txt if exists
         prune init --req custom-reqs.txt     # Create config from specific file
         prune init --update                  # Update config from requirements.txt
         prune init --update --req dev.txt    # Update config from specific file
+        prune init --update --clear-overrides  # Update and clear user overrides
     """
     # Create .prune directory if it doesn't exist
     prune_dir = Path.cwd() / PRUNE_DIR
@@ -81,6 +84,10 @@ def init(
     # Determine requirements file to use
     requirements_file = req if req else Path("requirements.txt")
     
+    # Validate --clear-overrides usage
+    if clear_overrides and not update:
+        print("⚠️  Warning: --clear-overrides only applies when using --update")
+    
     # Check if we're updating or creating new
     if update:
         if not config_path.exists():
@@ -88,13 +95,21 @@ def init(
             print("   Creating new configuration...")
         else:
             print(f"🔄 Updating configuration: {config_path}")
+            if clear_overrides:
+                print("   ⚠️  Clearing user overrides")
     
     # Try to generate config from requirements file
     if requirements_file.exists():
         print(f"📋 Reading requirements from: {requirements_file}")
         requirements = parse_requirements(requirements_file)
         print(f"   Found {len(requirements)} packages")
-        create_config_from_requirements(requirements_file, requirements, config_path)
+        create_config_from_requirements(
+            requirements_file, 
+            requirements, 
+            config_path, 
+            update_mode=update,
+            preserve_overrides=not clear_overrides
+        )
     else:
         # Create default config if no requirements file
         if req:

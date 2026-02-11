@@ -106,7 +106,9 @@ def calculate_file_hash(file_path: Path) -> str:
 
 def create_config_from_requirements(requirements_file: Path, 
                                     requirements: Dict[str, str],
-                                    output_path: Path | None = None) -> None:
+                                    output_path: Path | None = None,
+                                    update_mode: bool = False,
+                                    preserve_overrides: bool = True) -> None:
     """
     Create configuration file by fetching metadata from PyPI.
     
@@ -114,9 +116,23 @@ def create_config_from_requirements(requirements_file: Path,
         requirements_file: Path to requirements.txt
         requirements: Parsed requirements dictionary
         output_path: Optional output path for config file
+        update_mode: If True and output_path exists, preserve user overrides
+        preserve_overrides: If True (default), preserve _user_overrides section when updating
     """
     print(f"\n🌐 Fetching metadata from PyPI...")
     print("   This may take a few moments...\n")
+    
+    # Load existing user overrides if updating
+    existing_user_overrides = {}
+    if update_mode and preserve_overrides and output_path and output_path.exists():
+        try:
+            with open(output_path, 'r', encoding='utf-8') as f:
+                existing_config = json.load(f)
+                existing_user_overrides = existing_config.get('_user_overrides', {})
+                if existing_user_overrides:
+                    print("   💾 Preserving existing user overrides\n")
+        except Exception as e:
+            print(f"   ⚠️  Warning: Could not load existing config: {e}", file=sys.stderr)
     
     runtime_dependencies = {}
     package_extras = {}
@@ -177,6 +193,10 @@ def create_config_from_requirements(requirements_file: Path,
         "runtime_dependencies": runtime_dependencies,
         "package_extras": package_extras
     }
+    
+    # Add user overrides if they exist
+    if existing_user_overrides:
+        config["_user_overrides"] = existing_user_overrides
     
     # Write config or print to terminal
     if output_path:
