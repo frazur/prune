@@ -13,12 +13,13 @@ from .core import verify_requirements
 from .parser import parse_requirements
 from .pypi import create_config_from_requirements
 from .constants import PRUNE_DIR, PRUNE_CONFIG_FILE, DEFAULT_EXTRAS_CONFIG
+from . import overrides
 import json
 
 
 # Required by arguably for --version flag
 __version__ = _pkg_version
-__all__ = ['verify', 'init', 'main']
+__all__ = ['verify', 'init', 'override', 'main']
 
 
 @arguably.command
@@ -110,6 +111,115 @@ def init(
             except Exception as e:
                 print(f"❌ Error creating config file: {e}", file=sys.stderr)
                 sys.exit(1)
+
+
+@arguably.command(alias="override__ls")
+def override__list():
+    """
+    List all user overrides.
+    
+    Shows package mappings and runtime dependencies that have been
+    manually configured for this project.
+    
+    Examples:
+        prune override list
+        prune override ls
+    """
+    overrides.list_overrides()
+
+
+@arguably.command
+def override__ls():
+    """Alias for override list."""
+    overrides.list_overrides()
+
+
+@arguably.command
+def override__add_mapping(import_name: str, package_name: str):
+    """
+    Add a package mapping override.
+    
+    Maps an import name to a package name. Useful for custom packages
+    or when the import name doesn't match the package name.
+    
+    Args:
+        import_name: The import name (e.g., 'mylib')
+        package_name: The package name in requirements.txt (e.g., 'my-custom-package')
+    
+    Examples:
+        prune override add-mapping mylib my-custom-package
+        prune override add-mapping internal company-internal-lib
+    """
+    overrides.add_mapping(import_name, package_name)
+
+
+@arguably.command(alias="override__rm_mapping")
+def override__remove_mapping(import_name: str):
+    """
+    Remove a package mapping override.
+    
+    Args:
+        import_name: The import name to remove
+    
+    Examples:
+        prune override remove-mapping mylib
+        prune override rm-mapping mylib
+    """
+    overrides.remove_mapping(import_name)
+
+
+@arguably.command
+def override__rm_mapping(import_name: str):
+    """Alias for override remove-mapping."""
+    overrides.remove_mapping(import_name)
+
+
+@arguably.command
+def override__add_runtime(trigger_package: str, dependency: str):
+    """
+    Add a runtime dependency override.
+    
+    Specifies that when trigger_package is used, dependency should also
+    be marked as used even if not directly imported.
+    
+    Args:
+        trigger_package: The package that triggers the dependency
+        dependency: The runtime dependency to add
+    
+    Examples:
+        prune override add-runtime fastapi custom-auth-middleware
+        prune override add-runtime my-framework required-plugin
+    """
+    overrides.add_runtime(trigger_package, dependency)
+
+
+@arguably.command
+def override__remove_runtime(trigger_package: str, dependency: str):
+    """
+    Remove a runtime dependency override.
+    
+    Args:
+        trigger_package: The package that triggers the dependency
+        dependency: The runtime dependency to remove
+    
+    Examples:
+        prune override remove-runtime fastapi custom-auth-middleware
+    """
+    overrides.remove_runtime(trigger_package, dependency)
+
+
+@arguably.command
+def override__clear():
+    """
+    Clear all user overrides.
+    
+    Removes all custom package mappings and runtime dependencies.
+    This action requires confirmation.
+    
+    Examples:
+        prune override clear
+    """
+    overrides.clear_overrides()
 
 
 def main():
