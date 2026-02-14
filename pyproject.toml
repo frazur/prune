@@ -24,6 +24,11 @@ dependencies = [
     "arguably>=1.2.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+]
+
 [project.scripts]
 prune = "prune.cli:main"
 
