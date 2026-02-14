@@ -201,8 +201,10 @@ class TestPruneVerify:
     def test_verify_basic_functionality(self, prune_cmd, prune_env, temp_project, sample_requirements, sample_python_files):
         """Test basic verify command execution."""
         result = subprocess.run(
-            prune_cmd + [ "verify", 
-             str(sample_requirements), str(sample_python_files)],
+            prune_cmd + ["verify", 
+             str(sample_python_files), 
+             "--requirements-file", str(sample_requirements),
+             "--mapping"],
             env=prune_env,
             cwd=temp_project,
             capture_output=True,
@@ -243,8 +245,10 @@ class TestPruneVerify:
     def test_verify_creates_mapping_file(self, prune_cmd, prune_env, temp_project, sample_requirements, sample_python_files):
         """Test that mapping file shows package usage."""
         subprocess.run(
-            prune_cmd + [ "verify", 
-             str(sample_requirements), str(sample_python_files)],
+            prune_cmd + ["verify", 
+             str(sample_python_files), 
+             "--requirements-file", str(sample_requirements),
+             "--mapping"],
             env=prune_env,
             cwd=temp_project,
             capture_output=True,
@@ -305,14 +309,16 @@ class TestPruneVerify:
         }))
         
         result = subprocess.run(
-            prune_cmd + [ "verify", 
-             str(sample_requirements), str(sample_python_files),
+            prune_cmd + ["verify", 
+             str(sample_python_files),
+             "--requirements-file", str(sample_requirements),
              "--config", str(custom_config)],
             env=prune_env,
             cwd=temp_project,
             capture_output=True,
             text=True,
-            encoding="utf-8"
+            encoding="utf-8",
+            input="y\n"  # Confirm to proceed with hash mismatch warning
 )
         
         assert result.returncode == 0, f"Command failed: {result.stderr}"
@@ -320,7 +326,7 @@ class TestPruneVerify:
     def test_verify_with_no_source_paths_fails(self, prune_cmd, prune_env, temp_project, sample_requirements):
         """Test that verify fails when no source paths provided."""
         result = subprocess.run(
-            prune_cmd + [ "verify", str(sample_requirements)],
+            prune_cmd + ["verify", "--requirements-file", str(sample_requirements)],
             env=prune_env,
             cwd=temp_project,
             capture_output=True,
