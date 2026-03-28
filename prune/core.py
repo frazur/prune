@@ -120,11 +120,6 @@ def match_import_to_package(import_name: str,
     if normalized_import in requirements:
         return normalized_import, requirements[normalized_import]
     
-    # Try partial match (e.g., 'requests' matches 'requests-toolbelt')
-    for pkg_name in requirements:
-        if normalized_import in pkg_name or pkg_name in normalized_import:
-            return pkg_name, requirements[pkg_name]
-    
     return None, None
 
 
