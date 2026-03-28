@@ -573,6 +573,56 @@ class TestPackageMappings:
         # Pillow should be marked as used
         assert "Pillow" in verified_content or "pillow" in verified_content.lower()
 
+    def test_local_module_name_does_not_match_requirement_substring(self, prune_cmd, prune_env, temp_project):
+        """Test that local imports like core do not falsely match langchain-core."""
+        req_file = temp_project / "requirements.txt"
+        req_file.write_text(dedent("""
+            arguably
+            pydantic
+            langchain-core==1.0.0
+        """).strip())
+
+        src_dir = temp_project / "src"
+        src_dir.mkdir(exist_ok=True)
+
+        (src_dir / "cli.py").write_text(dedent("""
+            import arguably
+            from .core import run
+
+            def main():
+                return run()
+        """))
+
+        (src_dir / "core.py").write_text(dedent("""
+            def run():
+                return 1
+        """))
+
+        result = subprocess.run(
+            prune_cmd + [
+                "verify",
+                str(src_dir),
+                "--requirements-file", str(req_file),
+                "--mapping",
+            ],
+            env=prune_env,
+            cwd=temp_project,
+            capture_output=True,
+            text=True,
+            encoding="utf-8"
+        )
+
+        assert result.returncode == 0
+
+        verified_file = req_file.parent / f"{req_file.name}.verified"
+        verified_content = verified_file.read_text()
+        assert "arguably" in verified_content
+        assert "langchain-core" not in verified_content
+
+        mapping_file = req_file.parent / f"{req_file.name}.mapping"
+        mapping_content = mapping_file.read_text()
+        assert "langchain-core==1.0.0\n  →" not in mapping_content
+
 
 class TestRuntimeDependencies:
     """Test handling of runtime dependencies."""
